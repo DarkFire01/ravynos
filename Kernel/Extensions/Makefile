@@ -1,5 +1,6 @@
 SUBDIR = AppleAPIC IOACPIFamily IOPCIFamily IOStorageFamily IOATAFamily \
 	 AppleIntelPIIXATA msdosfs hfs AppleFileSystemDriver RavynAHCIPort \
+	 IOUSBFamily AppleUSBXHCI AppleUSBHub AppleUSBEHCI AppleUSBOHCI AppleUSBUHCI \
 	 IOGraphics corecrypto pthread #IOHIDFamily
 
 all: kernelcache
@@ -23,6 +24,12 @@ kernelcache: ${SUBDIR}
 	${EXTENSIONS}/IOACPIFamily/IOACPIFamily.kext \
 	${EXTENSIONS}/AppleAPIC/AppleAPIC.kext \
 	${EXTENSIONS}/IOPCIFamily/IOPCIFamily.kext \
+	${EXTENSIONS}/IOUSBFamily/IOUSBFamily.kext \
+	${EXTENSIONS}/AppleUSBXHCI/AppleUSBXHCI.kext \
+	${EXTENSIONS}/AppleUSBHub/AppleUSBHub.kext \
+	${EXTENSIONS}/AppleUSBEHCI/AppleUSBEHCI.kext \
+	${EXTENSIONS}/AppleUSBOHCI/AppleUSBOHCI.kext \
+	${EXTENSIONS}/AppleUSBUHCI/AppleUSBUHCI.kext \
 	${EXTENSIONS}/corecrypto/corecrypto.kext \
 	${EXTENSIONS}/pthread/pthread.kext \
 	${EXTENSIONS}/IOATAFamily/IOATAFamily.kext \

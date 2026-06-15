@@ -96,10 +96,46 @@ const OSSymbol *ACPICPU::getCPUName() {
 
 OSDefineMetaClassAndStructors(ACPICPUInterruptController, IOCPUInterruptController);
 
+// ravynOS second-level interrupt controller dispatch table. Populated via
+// ACPIRegisterSecondLevelIC() (called by IOPCIFamily for the MSI controller).
+// Read at interrupt time, so keep it small and lock-free; entries are only ever
+// appended during single-threaded platform init.
+struct ACPISecondLevelIC {
+	uint32_t                base;
+	uint32_t                count;
+	IOInterruptController * controller;
+};
+#define kACPIMaxSecondLevelICs 4
+static ACPISecondLevelIC gACPISecondLevelICs[kACPIMaxSecondLevelICs];
+static volatile uint32_t gACPINumSecondLevelICs = 0;
+
+void ACPIRegisterSecondLevelIC(uint32_t base, uint32_t count,
+                               IOInterruptController *ic) {
+	if (!ic) return;
+	uint32_t i = gACPINumSecondLevelICs;
+	if (i >= kACPIMaxSecondLevelICs) return;
+	gACPISecondLevelICs[i].base       = base;
+	gACPISecondLevelICs[i].count      = count;
+	gACPISecondLevelICs[i].controller = ic;
+	__sync_synchronize();
+	gACPINumSecondLevelICs = i + 1;
+}
+
 IOReturn ACPICPUInterruptController::handleInterrupt(void *refCon, IOService *nub, int source) {
 	// Override the implementation in IOCPUInterruptController to
 	// dispatch interrupts the old way. The source argument is ignored;
 	// the first IOCPUInterruptController in the vector array is always used.
+
+	// ravynOS: route a fired IDT vector to a registered second-level interrupt
+	// controller (e.g. the PCI MSI/MSI-X controller) if it owns the vector.
+	uint32_t n = gACPINumSecondLevelICs;
+	for (uint32_t i = 0; i < n; i++) {
+		uint32_t base  = gACPISecondLevelICs[i].base;
+		uint32_t count = gACPISecondLevelICs[i].count;
+		if ((uint32_t) source >= base && (uint32_t) source < base + count) {
+			return gACPISecondLevelICs[i].controller->handleInterrupt(refCon, nub, source);
+		}
+	}
 
 	IOInterruptVector *vector = &vectors[0];
 	if (!vector->interruptRegistered) return kIOReturnInvalid;

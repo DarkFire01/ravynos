@@ -30,6 +30,44 @@
 #include <IOKit/IODeviceTreeSupport.h>
 #include <IOKit/IOPlatformExpert.h>
 #include <IOKit/IOMapper.h>
+#include <IOKit/IOMemoryDescriptor.h>
+
+// ravynOS: map an MSI-X table/PBA region described by a (BAR register, offset).
+// IOPCIFamily on this platform doesn't always publish IODeviceMemory for a
+// device's BARs (QEMU), so mapDeviceMemoryWithRegister() can fail; fall back to
+// mapping the BAR's physical address read straight from config space. Returns
+// the CPU virtual address of (BAR base + offset), or 0 on failure. The mapping
+// is intentionally retained for the device's lifetime.
+static IOVirtualAddress
+RavynMapMSIXRegion(IOPCIDevice * device, uint8_t barReg, uint32_t offset)
+{
+    IOMemoryMap * map = device->mapDeviceMemoryWithRegister(barReg);
+    if (map) return (map->getVirtualAddress() + offset);
+
+    uint32_t lo   = device->configRead32(barReg);
+    uint64_t phys = 0;
+    if (!(lo & 0x1))                       // memory-space BAR
+    {
+        if ((lo & 0x6) == 0x4)             // 64-bit BAR
+        {
+            uint32_t hi = device->configRead32(barReg + 4);
+            phys = ((uint64_t) hi << 32) | (uint64_t)(lo & ~0xFu);
+        }
+        else
+        {
+            phys = (uint64_t)(lo & ~0xFu);
+        }
+    }
+    if (!phys) return (0);
+
+    IOMemoryDescriptor * md = IOMemoryDescriptor::withPhysicalAddress(
+            (IOPhysicalAddress)(phys + offset), 0x1000,
+            kIODirectionInOut | kIOMemoryMapperNone);
+    if (!md) return (0);
+    IOMemoryMap * m = md->map(kIOMapAnywhere | kIOMapInhibitCache);
+    if (!m) { md->release(); return (0); }
+    return (m->getVirtualAddress());
+}
 
 #define kMSIFreeCountKey    "MSIFree"
 
@@ -457,6 +495,26 @@ IOReturn IOPCIMessagedInterruptController::allocateDeviceInterrupts(
 				/* vector          */ (void *) (uintptr_t) (firstVector + _vectorBase),
 				/* message         */ (void *) &message[0]);
 
+	if (kIOReturnSuccess != ret)
+	{
+		// ravynOS: no platform driver implements GetMessagedInterruptAddress
+		// (Apple's AppleACPIPlatform would). When interrupt remapping (VT-d) is
+		// not active, the MSI message is just the bare local-APIC format: the
+		// write target is 0xFEE00000 | (destAPIC << 12) and the data is the
+		// 8-bit IDT vector raised on that CPU. Compute it directly so MSI
+		// allocation can succeed on this platform.
+		extern int cpu_to_lapic[];
+		uint32_t sysVector = firstVector + _vectorBase;
+		uint32_t lvec      = sysVector & 0xFF;          // 8-bit delivered vector
+		uint32_t lcpu      = (sysVector >> 8) & 0xFF;   // encoded target cpu index
+		uint32_t apicID    = (uint32_t) cpu_to_lapic[lcpu];
+
+		message[0] = 0xFEE00000 | (apicID << 12);   // physical dest, fixed delivery
+		message[1] = 0;                              // address high
+		message[2] = lvec;                           // edge-triggered, fixed, vector
+		ret = kIOReturnSuccess;
+	}
+
     if (kIOReturnSuccess == ret)
     {
         if (device)
@@ -525,21 +583,21 @@ IOReturn IOPCIMessagedInterruptController::allocateDeviceInterrupts(
 
             if (kMSIX & device->reserved->msiMode)
             {
-                IOMemoryMap * map;
-                uint32_t      table;
-                uint8_t       bar;
+                IOVirtualAddress addr;
+                uint32_t         table;
+                uint8_t          bar;
 
                 table = device->configRead32(msiCapability + 8);
                 bar = kIOPCIConfigBaseAddress0 + ((table & 7) << 2);
                 table &= ~7;
-                map = device->mapDeviceMemoryWithRegister(bar);
-                if (map) device->reserved->msiPBA = map->getAddress() + table;
+                addr = RavynMapMSIXRegion(device, bar, table);
+                if (addr) device->reserved->msiPBA = addr;
 
                 table  = device->configRead32(msiCapability + 4);
                 bar    = (kIOPCIConfigBaseAddress0 + ((table & 7) << 2));
                 table &= ~7;
-                map = device->mapDeviceMemoryWithRegister(bar);
-                if (map) device->reserved->msiTable = map->getAddress() + table;
+                addr = RavynMapMSIXRegion(device, bar, table);
+                if (addr) device->reserved->msiTable = addr;
             }
             else
             {

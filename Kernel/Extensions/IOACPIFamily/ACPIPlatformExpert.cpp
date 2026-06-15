@@ -44,6 +44,7 @@ extern "C" {
 
 #include "ACPIPlatformExpert.h"
 #include "AppleAPIC.h"
+#include "ACPICPU.h"
 #include "ACPIRTC.h"
 #include "EFINVRAM.h"
 
@@ -498,7 +499,16 @@ bool ACPIPlatformExpert::setNubInterruptVector(IOService *nub, UInt32 vector) {
 IOReturn ACPIPlatformExpert::callPlatformFunction(const OSSymbol *functionName, bool waitForFunction, void *param1, void *param2, void *param3, void *param4) {
     bool ok;
 
-    if (functionName->isEqualTo("SetDeviceInterrupts")) {
+    if (functionName->isEqualTo("RavynRegisterSecondLevelIC")) {
+        // ravynOS: a second-level interrupt controller (e.g. the PCI MSI/MSI-X
+        // controller) claims a vector range so fired IDT vectors in that range
+        // are forwarded to it by ACPICPUInterruptController::handleInterrupt.
+        uint32_t base  = (uint32_t)(uintptr_t) param1;
+        uint32_t count = (uint32_t)(uintptr_t) param2;
+        IOInterruptController *ic = (IOInterruptController *) param3;
+        ACPIRegisterSecondLevelIC(base, count, ic);
+        return kIOReturnSuccess;
+    } else if (functionName->isEqualTo("SetDeviceInterrupts")) {
         IOService *nub = (IOService *)param1;
         UInt32 *vectors = (UInt32 *)param2;
         UInt32 vectorCount = (UInt32)((UInt64)param3);

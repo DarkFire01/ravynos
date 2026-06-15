@@ -29,6 +29,19 @@
 
 extern uint32_t ncpus;
 
+class IOInterruptController;
+
+/*
+ * ravynOS second-level interrupt controller dispatch.
+ *
+ * Apple's AppleACPIPlatform routes a fired IDT vector to whichever second-level
+ * interrupt controller owns it. This port never wired that up, so register the
+ * owning controller's vector range here; ACPICPUInterruptController::handleInterrupt
+ * consults the table and forwards the interrupt to the controller.
+ */
+void ACPIRegisterSecondLevelIC(uint32_t base, uint32_t count,
+                               IOInterruptController *ic);
+
 class ACPICPU : public IOCPU {
 	OSDeclareDefaultStructors(ACPICPU);
 

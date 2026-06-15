@@ -374,6 +374,13 @@ IOPCIPlatformInitialize(void)
         forceintcpu = 0;
     }
 
+    // ravynOS: route all messaged (MSI/MSI-X) interrupts to the boot CPU. The
+    // synthesised x86 MSI message targets the BSP, and fired IDT vectors are
+    // dispatched to this controller by vector range; keeping the allocator to
+    // CPU-0 vectors (<= 0xFF) means a delivered 8-bit vector maps 1:1 back to
+    // the controller's vector.
+    lapic_max_interrupt_cpunum = 0;
+
 	ic = new IOPCIMessagedInterruptController;
 	if (ic && !ic->init(kNumMessagedInterruptVectors, kBaseMessagedInterruptVectors))
 	{
@@ -410,6 +417,17 @@ IOPCIPlatformInitialize(void)
 	}
 	if (!ic || !ok) panic("IOPCIMessagedInterruptController");
 	gIOPCIMessagedInterruptController = ic;
+
+	// ravynOS: wire the messaged interrupt controller into the CPU-level
+	// interrupt dispatcher. This port never connected second-level controllers
+	// to the trap path (ACPICPUInterruptController::handleInterrupt), so MSI/MSI-X
+	// vectors fired but were dropped. Register our vector range so fired IDT
+	// vectors in [base, base+count) are routed to ic->handleInterrupt().
+	provider->callPlatformFunction(
+			"RavynRegisterSecondLevelIC", false,
+			(void *)(uintptr_t) kBaseMessagedInterruptVectors,
+			(void *)(uintptr_t) kNumMessagedInterruptVectors,
+			(void *) ic, (void *) 0);
 
 	AppleVTD::install(gIOPCIConfigWorkLoop, gIOPCIFlags, provider, data);
 
@@ -496,7 +514,12 @@ IOReturn IOPCIBridge::configOp(IOService * device, uintptr_t op, void * result, 
             panic("!IOPCIConfigurator");
 
 #if ACPI_SUPPORT
-	    if (version_major < 17) IOPCIPlatformInitialize();
+	    /* ravynOS (Darwin 19): upstream skips IOPCIPlatformInitialize() on
+	     * version_major >= 17, expecting the platform to provide the PCI messaged
+	     * interrupt controller -- but nothing in this port does, so it stayed
+	     * NULL and MSI/MSI-X were impossible. Always create it; AppleVTD::install()
+	     * handles the no-DMAR (no IOMMU) case gracefully. */
+	    IOPCIPlatformInitialize();
 	    AppleVTD::installInterrupts();
 #endif /* ACPI_SUPPORT */
 

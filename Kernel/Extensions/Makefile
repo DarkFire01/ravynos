@@ -33,8 +33,10 @@ kernelcache: ${SUBDIR}
 	${EXTENSIONS}/hfs/hfs.kext \
 	${EXTENSIONS}/IOGraphics/IOGOPFramebuffer.kext
 	chmod 0644 ${.TARGET}.tmp
-	${LIPO} -create -output ${.OBJDIR}/${.TARGET} \
-	  -arch x86_64 ${.OBJDIR}/${.TARGET}.tmp
+	# plktool already emits the final compressed-container ('comp') kernelcache,
+	# which is not a Mach-O, so lipo cannot process it. For a single-arch build the
+	# universal/fat wrapper is unnecessary -- the .tmp IS the bootable kernelcache.
+	cp -f ${.OBJDIR}/${.TARGET}.tmp ${.OBJDIR}/${.TARGET}
 	cp -f ${.OBJDIR}/${.TARGET} ${ROOT_BINARY_DIR}
 
 .include <bsd.subdir.mk>

@@ -102,13 +102,16 @@ fmwk-install-hook: .PHONY
 .if defined(MODULEMAP) && !empty(MODULEMAP)
 all: copy_modulemap
 
-copy_modulemap: ${.CURDIR}/${MODULEMAP}
+# Depend on ${FRAMEWORK}: it builds the bundle that creates the Modules dir and
+# the top-level Modules symlink. Without this, the modulemap write races under -j
+# and fails with "Modules/module.modulemap: No such file or directory".
+copy_modulemap: ${.CURDIR}/${MODULEMAP} ${FRAMEWORK}
 	cp -f ${.CURDIR}/${MODULEMAP} \
 	  ${FRAMEWORK_DIR}/Versions/${FMWK_VERSION}/Modules/module.modulemap
 .else
 all: create_modulemap
 
-create_modulemap:
+create_modulemap: ${FRAMEWORK}
 	(echo 'framework module ${FRAMEWORK} {'; \
 	 echo '    umbrella header "${FRAMEWORK}.h"'; \
 	 echo '    export *'; \

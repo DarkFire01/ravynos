@@ -6,7 +6,7 @@ CFLAGS =--sysroot=${RAVYN_SDKROOT} -fuse-ld=${LD} \
 CXXFLAGS =-std=gnu++17 --sysroot=${RAVYN_SDKROOT} -fuse-ld=${LD} \
 	-mmacos-version-min=${MACOS_VERSION_MIN}
 LDFLAGS =--sysroot=${RAVYN_SDKROOT} -mmacos-version-min=${MACOS_VERSION_MIN} \
-	-fuse-ld=${LD} -licudata -lc++ \
+	-fuse-ld=${LD} -lc++ \
 	${ROOT_BINARY_DIR}${ROOT_SOURCE_DIR}/Libraries/llvm_target/compiler-rt/lib/ravynos/libclang_rt.osx.a
 
 EXTRA_FLAGS = --prefix=/usr --localstatedir=/var --sysconfdir=/etc
@@ -40,7 +40,8 @@ libicucore.A.dylib: lib${LIB}.a
 	  -Wl,-install_name,/usr/lib/${.TARGET} \
 	  -Wl,-current_version,78.3 -Wl,-compatibility_version,1 \
 	  $$(find ${.OBJDIR}/target/common ${.OBJDIR}/target/i18n \
-	  ${.OBJDIR}/target/io -name '*.o') ${LDFLAGS}
+	  ${.OBJDIR}/target/io -name '*.o') \
+	  -L${.OBJDIR}/target/lib -licudata ${LDFLAGS}
 .for dir in ${RAVYN_SDKROOT} ${SYSROOT_DIR}
 	mkdir -p ${dir}/usr/lib ${dir}/usr/include
 	cp -fp ${.OBJDIR}/${.TARGET} ${dir}/usr/lib/
@@ -48,4 +49,7 @@ libicucore.A.dylib: lib${LIB}.a
 	cp -fdp ${.OBJDIR}/target/lib/libicudata* ${dir}/usr/lib/
 	cp -Rfp ${.CURDIR}/source/i18n/unicode ${.CURDIR}/source/i18n/*.h \
 	  ${dir}/usr/include
+	mkdir -p ${dir}/usr/include/unicode
+	cp -fp ${.CURDIR}/source/common/unicode/*.h \
+	  ${.CURDIR}/source/io/unicode/*.h ${dir}/usr/include/unicode/
 .endfor

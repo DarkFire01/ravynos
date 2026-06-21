@@ -101,6 +101,7 @@ SUBDIR = copyfile removefile libdispatch libsystem_blocks libsystem_kernel \
 	libsystem_dnssd libxpc liblaunch libsystem_m libsystem_darwin \
 	libsystem_coreservices libmacho
 
+${.OBJDIR}/lib${LIB}.dylib: ${SUBDIR}
 #CommonCrypto
 
 

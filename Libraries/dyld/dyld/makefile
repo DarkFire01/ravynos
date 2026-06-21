@@ -125,6 +125,13 @@ all: ${LIB}
 
 ${LIB}: ${.OBJDIR}/${LIB}
 
+# This rule installs the compressed man pages during build, but the standard
+# "all: all-man" wiring (bsd.lib.mk) is gated off by LIBRARIES_ONLY during the
+# Libraries phase, so all-man never runs and the *.gz are never produced.
+# Depend on the .gz targets explicitly so they exist before the cp below.
+# (MK_MANCOMPRESS=yes in this tree, so the extension is .gz.)
+${.OBJDIR}/${LIB}: ${MAN:T:S/$/.gz/}
+
 ${.OBJDIR}/${LIB}: ${OBJS}
 	${CC} -fuse-ld=${LD} -o ${.TARGET} ${OBJS:O:u} ${LDFLAGS}
 	mkdir -p ${RAVYN_SDKROOT}/usr/lib ${ROOT_BINARY_DIR}/sysroot/usr/lib

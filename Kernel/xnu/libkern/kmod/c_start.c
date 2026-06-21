@@ -81,7 +81,7 @@ struct section_64 { /* for 64-bit architectures */
 typedef void (*structor_t)(void);
 extern void kprintf(const char *fmt, ...);
 
-static void
+static void __attribute__((unused))
 __call_constructors(kmod_info_t *ki)
 {
     struct mach_header_64 * mh = (struct mach_header_64 *) ki->address;
@@ -119,8 +119,6 @@ __call_constructors(kmod_info_t *ki)
 __private_extern__ kern_return_t
 _start(kmod_info_t *ki, void *data)
 {
-        __call_constructors(ki);
-        
 	if (_realmain) {
 		return (*_realmain)(ki, data);
 	} else {
